@@ -68,9 +68,12 @@ async function run() {
 
       // collections
       const userCollection = client.db("summer-camp-FLLS").collection("users");
+      const classesCollection = client
+         .db("summer-camp-FLLS")
+         .collection("classes");
 
       //<|---------------- Routes Start ------------------|>//
-      // Create user
+      // Create user <> user <>
       app.post("/createUser", async (req, res) => {
          const { email, name, photoURL } = req.body;
          const user = await userCollection.findOne({ email });
@@ -90,7 +93,6 @@ async function run() {
                payment: [],
                number_of_classes: 0,
                name_of_classes: [],
-               classes: [],
                createdAt: Date.now(),
             });
             if (result.acknowledged) {
@@ -139,6 +141,107 @@ async function run() {
          }
          next();
       };
+
+      // add a class <> Instructor <>
+      app.post("/class", async (req, res) => {
+         const {
+            class_name,
+            img,
+            instructor_name,
+            instructor_email,
+            seats,
+            price,
+         } = req.body;
+         const doc = {
+            class_name,
+            img,
+            instructor_name,
+            instructor_email,
+            seats,
+            price,
+            enrolled_students: 0,
+            status: "pending",
+            feedback: "",
+         };
+
+         const result = await classesCollection.insertOne(doc);
+         if (result.insertedId) {
+            const user = await userCollection.findOne({
+               email: instructor_email,
+            });
+            const updateDoc = await userCollection.updateOne(
+               { email: instructor_email },
+               {
+                  $set: {
+                     number_of_classes: user.number_of_classes + 1,
+                     name_of_classes: [...user.name_of_classes, class_name],
+                  },
+               }
+            );
+            if (updateDoc.modifiedCount) {
+               return res.status(201).json({
+                  success: true,
+                  message: "Class Created Success",
+               });
+            } else {
+               await classesCollection.deleteOne({
+                  _id: new ObjectId(result.insertedId),
+               });
+               return res.status(400).json({
+                  success: false,
+                  message: "Class Created Failed!",
+               });
+            }
+         } else {
+            return res.status(400).json({
+               success: false,
+               message: "Class Created Failed!",
+            });
+         }
+      });
+
+      // get all classes <> Admin <>
+      app.get("/classes", async (req, res) => {
+         const classes = await classesCollection.find().toArray();
+         res.status(200).json({
+            success: true,
+            classes,
+         });
+      });
+
+      // update class <> Instructor <>
+      app.patch("/class/:id", async (req, res) => {
+         const { id } = req.params;
+
+         const result = await classesCollection.updateOne(
+            { _id: new ObjectId(id) },
+            {
+               $set: req.body,
+            }
+         );
+         if (result.modifiedCount) {
+            return res.status(200).json({
+               success: true,
+               message: "Class Updated",
+            });
+         } else {
+            return res.status(400).json({
+               success: false,
+               message: "Class Updated Failed!",
+            });
+         }
+      });
+
+      // delete a class
+
+      // get all users <> Admin <>
+      app.get("/users", async (req, res) => {
+         const users = await userCollection.find().toArray();
+         res.status(200).json({
+            success: true,
+            users,
+         });
+      });
 
       //<|---------------- Routes End ------------------|>//
    } catch {
