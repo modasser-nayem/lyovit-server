@@ -114,9 +114,13 @@ async function run() {
          const { email } = req.body;
          const user = await userCollection.findOne({ email });
          if (user) {
-            const token = jwt.sign({ email }, process.env.JWT_SECRET, {
-               expiresIn: "1d",
-            });
+            const token = jwt.sign(
+               { email: user.email, role: user.role },
+               process.env.JWT_SECRET,
+               {
+                  expiresIn: "1d",
+               }
+            );
             res.status(200).json({
                success: true,
                token: "Bearer " + token,
@@ -200,13 +204,23 @@ async function run() {
          }
       });
 
-      // get all classes <> Admin <>
-      app.get("/classes", async (req, res) => {
-         const classes = await classesCollection.find().toArray();
-         res.status(200).json({
-            success: true,
-            classes,
-         });
+      // My classes <> Instructor <>
+      app.get("/my-classes", async (req, res) => {
+         const email = "nayem@gmail.com" || req.decode.email;
+         const myClasses = await classesCollection
+            .find({ instructor_email: email })
+            .toArray();
+         if (myClasses) {
+            return res.status(200).json({
+               success: true,
+               data: myClasses,
+            });
+         } else {
+            return res.status(404).json({
+               success: false,
+               data: myClasses,
+            });
+         }
       });
 
       // update class <> Instructor <>
@@ -234,12 +248,21 @@ async function run() {
 
       // delete a class
 
+      // get all classes <> Admin <>
+      app.get("/classes", async (req, res) => {
+         const classes = await classesCollection.find().toArray();
+         res.status(200).json({
+            success: true,
+            data: classes,
+         });
+      });
+
       // get all users <> Admin <>
       app.get("/users", async (req, res) => {
          const users = await userCollection.find().toArray();
          res.status(200).json({
             success: true,
-            users,
+            data: users,
          });
       });
 
