@@ -206,7 +206,7 @@ async function run() {
 
       // My classes <> Instructor <>
       app.get("/my-classes", async (req, res) => {
-         const email = "nayem@gmail.com" || req.decode.email;
+         const email = "nayem@gmail.com" || req.decode.email; // TODO: instructor email
          const myClasses = await classesCollection
             .find({ instructor_email: email })
             .toArray();
@@ -259,12 +259,33 @@ async function run() {
 
       // get all users <> Admin <>
       app.get("/users", async (req, res) => {
-         const users = await userCollection.find().toArray();
-         res.status(200).json({
-            success: true,
-            data: users,
-         });
+         const options = {
+            // sort returned documents in ascending order by title (A->Z)
+            // sort: { name: 1 },
+            projection: {
+               _id: 1,
+               name: 1,
+               email: 1,
+               photoURL: 1,
+               role: 1,
+               createdAt: 1,
+            },
+         };
+         const users = await userCollection.find({}, options).toArray();
+         if (users) {
+            return res.status(200).json({
+               success: true,
+               data: users,
+            });
+         } else {
+            return res.status(500).json({
+               success: false,
+               message: "Server error",
+            });
+         }
       });
+
+      // Update user role <> Admin <>
 
       //<|---------------- Routes End ------------------|>//
    } catch {
