@@ -246,7 +246,7 @@ async function run() {
          }
       });
 
-      // delete a class
+      // delete a class <> Instructor <>
 
       // get all classes <> Admin <>
       app.get("/classes", async (req, res) => {
@@ -285,7 +285,32 @@ async function run() {
          }
       });
 
-      // Update user role <> Admin <>
+      // manage user role <> Admin <>
+      app.patch("/update-role/:id", async (req, res) => {
+         const { id } = req.params;
+         const updateRole = req.query.role;
+         const user = await userCollection.updateOne(
+            { _id: new ObjectId(id) },
+            {
+               $set: {
+                  role: updateRole,
+               },
+            }
+         );
+         if (user.modifiedCount) {
+            return res.status(200).json({
+               success: true,
+               message: `Update to ${updateRole}`,
+            });
+         } else {
+            return res.status(400).json({
+               success: false,
+               message: "Update Failed!",
+            });
+         }
+      });
+
+      // manage user role <> Admin <>
 
       //<|---------------- Routes End ------------------|>//
    } catch {
