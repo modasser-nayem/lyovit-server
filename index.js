@@ -155,6 +155,7 @@ async function run() {
          }
          next();
       };
+
       // verify Instructor middleware function
       const verifyInstructor = async (req, res, next) => {
          const email = req.decoded.email;
@@ -167,6 +168,26 @@ async function run() {
             }
          );
          if (user.role !== "instructor") {
+            return res.status(403).json({
+               success: false,
+               message: "Forbidden Access",
+            });
+         }
+         next();
+      };
+
+      // verify Student middleware function
+      const verifyStudent = async (req, res, next) => {
+         const email = req.decoded.email;
+         const user = await userCollection.findOne(
+            { email },
+            {
+               projection: {
+                  role: 1,
+               },
+            }
+         );
+         if (user.role !== "student") {
             return res.status(403).json({
                success: false,
                message: "Forbidden Access",
