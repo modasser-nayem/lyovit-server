@@ -139,8 +139,53 @@ async function run() {
       // verify Admin middleware function
       const verifyAdmin = async (req, res, next) => {
          const email = req.decoded.email;
-         const user = await userCollection.findOne({ email });
+         const user = await userCollection.findOne(
+            { email },
+            {
+               projection: {
+                  role: 1,
+               },
+            }
+         );
          if (user.role !== "admin") {
+            return res.status(403).json({
+               success: false,
+               message: "Forbidden Access",
+            });
+         }
+         next();
+      };
+      // verify Instructor middleware function
+      const verifyInstructor = async (req, res, next) => {
+         const email = req.decoded.email;
+         const user = await userCollection.findOne(
+            { email },
+            {
+               projection: {
+                  role: 1,
+               },
+            }
+         );
+         if (user.role !== "instructor") {
+            return res.status(403).json({
+               success: false,
+               message: "Forbidden Access",
+            });
+         }
+         next();
+      };
+      // verify Student middleware function
+      const verifyStudent = async (req, res, next) => {
+         const email = req.decoded.email;
+         const user = await userCollection.findOne(
+            { email },
+            {
+               projection: {
+                  role: 1,
+               },
+            }
+         );
+         if (user.role !== "student") {
             return res.status(403).json({
                success: false,
                message: "Forbidden Access",
@@ -353,8 +398,40 @@ async function run() {
             )
             .sort({ enrolled_students: -1 })
             .toArray();
-         res.json({
-            popularClasses,
+         if (popularClasses) {
+            return res.status(200).json({
+               success: true,
+               data: popularClasses,
+            });
+         }
+         res.status(500).json({
+            success: false,
+            message: "server error",
+         });
+      });
+
+      // Popular Instructors <> Public <> TODO: not implement
+      app.get("/popular-instructor", async (req, res) => {
+         const classes = await classesCollection
+            .find(
+               {},
+               {
+                  projection: {
+                     enrolled_students: 1,
+                  },
+               }
+            )
+            .toArray();
+         const popularInstructor = await userCollection.find().toArray();
+         if (popularInstructor) {
+            return res.status(200).json({
+               success: true,
+               data: popularInstructor,
+            });
+         }
+         res.status(500).json({
+            success: false,
+            message: "server error",
          });
       });
 
