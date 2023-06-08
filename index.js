@@ -71,6 +71,9 @@ async function run() {
       const classesCollection = client
          .db("summer-camp-FLLS")
          .collection("classes");
+      const paymentCollection = client
+         .db("summer-camp-FLLS")
+         .collection("payment");
 
       //<|---------------- Routes Start ------------------|>//
       // Create user <> user <>
@@ -146,7 +149,106 @@ async function run() {
          next();
       };
 
-      // add a class <> Instructor <>
+      // Select a class <> Student <> (req.body=id)
+      app.post("/select-class", async (req, res) => {
+         const _id = req.body.id;
+         const query = { email: "nayem@gmail.com" || req.decode.email };
+         const result = await userCollection.updateOne(query, {
+            $addToSet: {
+               selected_classes: _id,
+            },
+         });
+         if (result.modifiedCount) {
+            return res.status(200).json({
+               success: true,
+               message: "Selected Class",
+            });
+         } else if (result.modifiedCount === 0) {
+            return res.status(400).json({
+               success: false,
+               message: "Class not selected",
+            });
+         }
+         res.status(500).json({
+            success: false,
+            message: "Server error",
+         });
+      });
+
+      // Enrolled a Class <> Student <> (req.body)
+      app.post("/payment", async (req, res) => {
+         const {
+            class_id,
+            class_name,
+            img,
+            author_id,
+            amount,
+            date,
+            transaction_id,
+         } = req.body;
+         const exist = await userCollection.findOne({
+            _id: new ObjectId(author_id),
+         });
+         if (!exist.enrolled_classes.includes(class_id)) {
+            const result = await paymentCollection.insertOne(req.body);
+            if (!result) {
+               return res.status(500).json({
+                  success: false,
+                  message: "server error",
+               });
+            }
+            if (result.insertedId) {
+               const updateClass = await classesCollection.updateOne(
+                  { _id: new ObjectId(class_id) },
+                  {
+                     $inc: {
+                        enrolled_students: 1,
+                     },
+                  }
+               );
+               const updateUser = await userCollection.updateOne(
+                  { _id: new ObjectId(author_id) },
+                  {
+                     $pull: {
+                        selected_classes: class_id,
+                     },
+                     $addToSet: {
+                        enrolled_classes: class_id,
+                        payment: result.insertedId,
+                     },
+                  }
+               );
+               if (updateClass.modifiedCount && updateUser.modifiedCount) {
+                  return res.status(201).json({
+                     success: true,
+                     message: "Class Enrolled Success",
+                     updateClass,
+                     updateUser,
+                  });
+               } else {
+                  await paymentCollection.deleteOne({ _id: result.insertedId });
+                  return res.status(201).json({
+                     success: false,
+                     message: "Class Enrolled Failed!",
+                     updateClass,
+                     updateUser,
+                  });
+               }
+            } else {
+               return res.status(500).json({
+                  success: false,
+                  message: "server error",
+               });
+            }
+         } else {
+            return res.status(400).json({
+               success: false,
+               message: "Already Enrolled",
+            });
+         }
+      });
+
+      // add a class <> Instructor <> (req.body)
       app.post("/class", async (req, res) => {
          const {
             class_name,
@@ -223,7 +325,7 @@ async function run() {
          }
       });
 
-      // update class <> Instructor <>
+      // update class <> Instructor <> (params=id, req.body)
       app.patch("/class/:id", async (req, res) => {
          const { id } = req.params;
 
@@ -285,7 +387,7 @@ async function run() {
          }
       });
 
-      // manage user role <> Admin <>
+      // manage user role <> Admin <> (params=id, query=role)
       app.patch("/update-role/:id", async (req, res) => {
          const { id } = req.params;
          const updateRole = req.query.role;
@@ -310,7 +412,33 @@ async function run() {
          }
       });
 
-      // manage user role <> Admin <>
+      // manage Classes <> Admin <> (params=id, query=status, req.body)
+      app.patch("/class-status/:id", async (req, res) => {
+         const { id } = req.params;
+         const { feedback = "" } = req.body;
+         const updateStatus = req.query.status;
+         const user = await classesCollection.updateOne(
+            { _id: new ObjectId(id) },
+            {
+               $set: {
+                  status: updateStatus,
+                  feedback:
+                     updateStatus.toLowerCase() === "denied" ? feedback : "",
+               },
+            }
+         );
+         if (user.modifiedCount) {
+            return res.status(200).json({
+               success: true,
+               message: `Update to ${updateStatus}`,
+            });
+         } else {
+            return res.status(400).json({
+               success: false,
+               message: "Update Failed!",
+            });
+         }
+      });
 
       //<|---------------- Routes End ------------------|>//
    } catch {
