@@ -175,7 +175,7 @@ async function run() {
          });
       });
 
-      // Select a class <> Student <>
+      // My selected class <> Student <>
       app.get("/my-selected-class", async (req, res) => {
          const email = "nayem@gmail.com" || req.decode.email;
          const user = await userCollection.findOne({ email });
@@ -183,9 +183,58 @@ async function run() {
          let classes = [];
          for (id in selectedClass) {
             classes = await classesCollection
-               .find({
-                  _id: new ObjectId(selectedClass[id]),
-               })
+               .find(
+                  {
+                     _id: new ObjectId(selectedClass[id]),
+                  },
+                  {
+                     projection: {
+                        class_id: 1,
+                        class_name: 1,
+                        img: 1,
+                        instructor_name: 1,
+                        seats: 1,
+                        price: 1,
+                     },
+                  }
+               )
+               .toArray();
+         }
+         if (classes) {
+            return res.json({
+               success: true,
+               data: classes,
+            });
+         }
+         res.json({
+            success: false,
+            message: "server error",
+         });
+      });
+
+      // My selected class <> Student <>
+      app.get("/my-enrolled-class", async (req, res) => {
+         const email = "nayem@gmail.com" || req.decode.email;
+         const user = await userCollection.findOne({ email });
+         const enrolledClass = user.enrolled_classes;
+         let classes = [];
+         for (id in enrolledClass) {
+            classes = await classesCollection
+               .find(
+                  {
+                     _id: new ObjectId(enrolledClass[id]),
+                  },
+                  {
+                     projection: {
+                        class_id: 1,
+                        class_name: 1,
+                        img: 1,
+                        instructor_name: 1,
+                        seats: 1,
+                        price: 1,
+                     },
+                  }
+               )
                .toArray();
          }
          if (classes) {
@@ -214,61 +263,74 @@ async function run() {
          const exist = await userCollection.findOne({
             _id: new ObjectId(author_id),
          });
-         if (!exist.enrolled_classes.includes(class_id)) {
-            const result = await paymentCollection.insertOne(req.body);
-            if (!result) {
-               return res.status(500).json({
-                  success: false,
-                  message: "server error",
-               });
-            }
-            if (result.insertedId) {
-               const updateClass = await classesCollection.updateOne(
-                  { _id: new ObjectId(class_id) },
-                  {
-                     $inc: {
-                        enrolled_students: 1,
-                     },
-                  }
-               );
-               const updateUser = await userCollection.updateOne(
-                  { _id: new ObjectId(author_id) },
-                  {
-                     $pull: {
-                        selected_classes: class_id,
-                     },
-                     $addToSet: {
-                        enrolled_classes: class_id,
-                        payment: result.insertedId,
-                     },
-                  }
-               );
-               if (updateClass.modifiedCount && updateUser.modifiedCount) {
-                  return res.status(201).json({
-                     success: true,
-                     message: "Class Enrolled Success",
-                     updateClass,
-                     updateUser,
-                  });
-               } else {
-                  await paymentCollection.deleteOne({ _id: result.insertedId });
-                  return res.status(201).json({
+         const availableSeat = await classesCollection.findOne({
+            _id: new ObjectId(class_id),
+         });
+         if (availableSeat.seats > 0) {
+            if (!exist.enrolled_classes.includes(class_id)) {
+               const result = await paymentCollection.insertOne(req.body);
+               if (!result) {
+                  return res.status(500).json({
                      success: false,
-                     message: "Class Enrolled Failed!",
-                     updateClass,
-                     updateUser,
+                     message: "server error",
+                  });
+               }
+               if (result.insertedId) {
+                  const updateClass = await classesCollection.updateOne(
+                     { _id: new ObjectId(class_id) },
+                     {
+                        $inc: {
+                           enrolled_students: 1,
+                           seats: -1,
+                        },
+                     }
+                  );
+                  const updateUser = await userCollection.updateOne(
+                     { _id: new ObjectId(author_id) },
+                     {
+                        $pull: {
+                           selected_classes: class_id,
+                        },
+                        $addToSet: {
+                           enrolled_classes: class_id,
+                           payment: result.insertedId,
+                        },
+                     }
+                  );
+                  if (updateClass.modifiedCount && updateUser.modifiedCount) {
+                     return res.status(201).json({
+                        success: true,
+                        message: "Class Enrolled Success",
+                        updateClass,
+                        updateUser,
+                     });
+                  } else {
+                     await paymentCollection.deleteOne({
+                        _id: result.insertedId,
+                     });
+                     return res.status(201).json({
+                        success: false,
+                        message: "Class Enrolled Failed!",
+                        updateClass,
+                        updateUser,
+                     });
+                  }
+               } else {
+                  return res.status(500).json({
+                     success: false,
+                     message: "server error",
                   });
                }
             } else {
-               return res.status(500).json({
+               return res.status(400).json({
                   success: false,
-                  message: "server error",
+                  message: "Already Enrolled",
                });
             }
          } else {
             return res.status(400).json({
                success: false,
-               message: "Already Enrolled",
+               message: "Seat Not Available",
             });
          }
       });
