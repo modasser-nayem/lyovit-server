@@ -335,6 +335,29 @@ async function run() {
          }
       });
 
+      // Popular classes <> Public <>
+      app.get("/popular-classes", async (req, res) => {
+         const popularClasses = await classesCollection
+            .find(
+               {},
+               {
+                  projection: {
+                     class_id: 1,
+                     class_name: 1,
+                     img: 1,
+                     instructor_name: 1,
+                     seats: 1,
+                     price: 1,
+                  },
+               }
+            )
+            .sort({ enrolled_students: -1 })
+            .toArray();
+         res.json({
+            popularClasses,
+         });
+      });
+
       // add a class <> Instructor <> (req.body)
       app.post("/class", async (req, res) => {
          const {
