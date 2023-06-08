@@ -175,6 +175,31 @@ async function run() {
          });
       });
 
+      // Select a class <> Student <>
+      app.get("/my-selected-class", async (req, res) => {
+         const email = "nayem@gmail.com" || req.decode.email;
+         const user = await userCollection.findOne({ email });
+         const selectedClass = user.selected_classes;
+         let classes = [];
+         for (id in selectedClass) {
+            classes = await classesCollection
+               .find({
+                  _id: new ObjectId(selectedClass[id]),
+               })
+               .toArray();
+         }
+         if (classes) {
+            return res.json({
+               success: true,
+               data: classes,
+            });
+         }
+         res.json({
+            success: false,
+            message: "server error",
+         });
+      });
+
       // Enrolled a Class <> Student <> (req.body)
       app.post("/payment", async (req, res) => {
          const {
