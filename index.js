@@ -174,25 +174,6 @@ async function run() {
          }
          next();
       };
-      // verify Student middleware function
-      const verifyStudent = async (req, res, next) => {
-         const email = req.decoded.email;
-         const user = await userCollection.findOne(
-            { email },
-            {
-               projection: {
-                  role: 1,
-               },
-            }
-         );
-         if (user.role !== "student") {
-            return res.status(403).json({
-               success: false,
-               message: "Forbidden Access",
-            });
-         }
-         next();
-      };
 
       // Select a class <> Student <> (req.body=id)
       app.post("/select-class", async (req, res) => {
