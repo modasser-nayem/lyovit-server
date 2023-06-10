@@ -47,7 +47,8 @@ const verifyJWT = async (req, res, next) => {
 //---------------------------------------------
 //                Mongodb Start
 //---------------------------------------------
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.p87lrd6.mongodb.net/?retryWrites=true&w=majority`;
+// const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.p87lrd6.mongodb.net/?retryWrites=true&w=majority`;
+const uri = "mongodb://localhost:27017/educations";
 
 const client = new MongoClient(uri, {
    serverApi: {
@@ -259,7 +260,7 @@ async function run() {
          });
       });
 
-      // My selected class <> Student <>
+      // My Enrolled class <> Student <>
       app.get("/my-enrolled-class", async (req, res) => {
          const email = "nayem@gmail.com" || req.decode.email;
          const user = await userCollection.findOne({ email });
@@ -458,7 +459,6 @@ async function run() {
             status: "pending",
             feedback: "",
          };
-
          const result = await classesCollection.insertOne(doc);
          if (result.insertedId) {
             const user = await userCollection.findOne({
@@ -496,8 +496,8 @@ async function run() {
       });
 
       // My classes <> Instructor <>
-      app.get("/my-classes", async (req, res) => {
-         const email = "nayem@gmail.com" || req.decode.email; // TODO: instructor email
+      app.get("/my-classes", verifyJWT, async (req, res) => {
+         const email = req.decoded.email;
          const myClasses = await classesCollection
             .find({ instructor_email: email })
             .toArray();
@@ -515,7 +515,7 @@ async function run() {
       });
 
       // update class <> Instructor <> (params=id, req.body)
-      app.patch("/class/:id", async (req, res) => {
+      app.patch("/class/:id", verifyJWT, async (req, res) => {
          const { id } = req.params;
 
          const result = await classesCollection.updateOne(
@@ -533,6 +533,25 @@ async function run() {
             return res.status(400).json({
                success: false,
                message: "Class Updated Failed!",
+            });
+         }
+      });
+
+      // Get single class <> public <>
+      app.get("/class/:id", verifyJWT, async (req, res) => {
+         const { id } = req.params;
+         const result = await classesCollection.findOne({
+            _id: new ObjectId(id),
+         });
+         if (result) {
+            return res.status(200).json({
+               success: true,
+               data: result,
+            });
+         } else {
+            return res.status(200).json({
+               success: false,
+               message: "this class is not exist",
             });
          }
       });
