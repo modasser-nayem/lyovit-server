@@ -47,8 +47,8 @@ const verifyJWT = async (req, res, next) => {
 //---------------------------------------------
 //                Mongodb Start
 //---------------------------------------------
-// const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.p87lrd6.mongodb.net/?retryWrites=true&w=majority`;
-const uri = "mongodb://localhost:27017/educations";
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.p87lrd6.mongodb.net/?retryWrites=true&w=majority`;
+// const uri = "mongodb://localhost:27017/educations";
 
 const client = new MongoClient(uri, {
    serverApi: {
@@ -133,6 +133,23 @@ async function run() {
             return res.status(400).json({
                success: false,
                message: "This user is not exist",
+            });
+         }
+      });
+
+      // get single user
+      app.get("/user", async (req, res) => {
+         const email = req.query.email;
+         const user = await userCollection.findOne({ email });
+         if (user) {
+            return res.status(200).json({
+               success: true,
+               data: user,
+            });
+         } else {
+            return res.status(400).json({
+               success: false,
+               message: "User not found!",
             });
          }
       });
@@ -224,45 +241,47 @@ async function run() {
       });
 
       // My selected class <> Student <>
-      app.get("/my-selected-class", async (req, res) => {
-         const email = "nayem@gmail.com" || req.decode.email;
+      app.get("/my-selected-class", verifyJWT, async (req, res) => {
+         const email = req.decoded.email;
          const user = await userCollection.findOne({ email });
-         const selectedClass = user.selected_classes;
-         let classes = [];
-         for (id in selectedClass) {
-            classes = await classesCollection
-               .find(
-                  {
-                     _id: new ObjectId(selectedClass[id]),
-                  },
-                  {
-                     projection: {
-                        class_id: 1,
-                        class_name: 1,
-                        img: 1,
-                        instructor_name: 1,
-                        seats: 1,
-                        price: 1,
+         if (user) {
+            const selectedClass = user.selected_classes;
+            let classes = [];
+            for (id in selectedClass) {
+               classes = await classesCollection
+                  .find(
+                     {
+                        _id: new ObjectId(selectedClass[id]),
                      },
-                  }
-               )
-               .toArray();
-         }
-         if (classes) {
-            return res.json({
-               success: true,
-               data: classes,
+                     {
+                        projection: {
+                           class_id: 1,
+                           class_name: 1,
+                           img: 1,
+                           instructor_name: 1,
+                           seats: 1,
+                           price: 1,
+                        },
+                     }
+                  )
+                  .toArray();
+            }
+            if (classes) {
+               return res.json({
+                  success: true,
+                  data: classes,
+               });
+            }
+            res.json({
+               success: false,
+               message: "server error",
             });
          }
-         res.json({
-            success: false,
-            message: "server error",
-         });
       });
 
       // My Enrolled class <> Student <>
-      app.get("/my-enrolled-class", async (req, res) => {
-         const email = "nayem@gmail.com" || req.decode.email;
+      app.get("/my-enrolled-class", verifyJWT, async (req, res) => {
+         const email = req.decoded.email;
          const user = await userCollection.findOne({ email });
          const enrolledClass = user.enrolled_classes;
          let classes = [];
@@ -298,7 +317,7 @@ async function run() {
       });
 
       // Enrolled a Class <> Student <> (req.body)
-      app.post("/payment", async (req, res) => {
+      app.post("/payment", verifyJWT, async (req, res) => {
          const {
             class_id,
             class_name,
@@ -439,7 +458,7 @@ async function run() {
       });
 
       // add a class <> Instructor <> (req.body)
-      app.post("/class", async (req, res) => {
+      app.post("/class", verifyJWT, async (req, res) => {
          const {
             class_name,
             img,
@@ -558,7 +577,7 @@ async function run() {
 
       // delete a class <> Instructor <>
 
-      // get all classes <> Admin <>
+      // get all classes <> Admin || public <>
       app.get("/classes", async (req, res) => {
          const classes = await classesCollection.find().toArray();
          res.status(200).json({
@@ -568,7 +587,7 @@ async function run() {
       });
 
       // get all users <> Admin <>
-      app.get("/users", async (req, res) => {
+      app.get("/users", verifyJWT, async (req, res) => {
          const options = {
             // sort returned documents in ascending order by title (A->Z)
             // sort: { name: 1 },
@@ -596,7 +615,7 @@ async function run() {
       });
 
       // manage user role <> Admin <> (params=id, query=role)
-      app.patch("/update-role/:id", async (req, res) => {
+      app.patch("/update-role/:id", verifyJWT, async (req, res) => {
          const { id } = req.params;
          const updateRole = req.query.role;
          const user = await userCollection.updateOne(
@@ -620,30 +639,52 @@ async function run() {
          }
       });
 
-      // manage Classes <> Admin <> (params=id, query=status, req.body)
-      app.patch("/class-status/:id", async (req, res) => {
+      // manage Classes Status <> Admin <> (params=id, query=status)
+      app.patch("/class-status/:id", verifyJWT, async (req, res) => {
          const { id } = req.params;
-         const { feedback = "" } = req.body;
          const updateStatus = req.query.status;
-         const user = await classesCollection.updateOne(
+         const result = await classesCollection.updateOne(
             { _id: new ObjectId(id) },
             {
                $set: {
                   status: updateStatus,
-                  feedback:
-                     updateStatus.toLowerCase() === "denied" ? feedback : "",
                },
             }
          );
-         if (user.modifiedCount) {
+         if (result.modifiedCount) {
             return res.status(200).json({
                success: true,
-               message: `Update to ${updateStatus}`,
+               message: `Class is ${updateStatus}`,
             });
          } else {
             return res.status(400).json({
                success: false,
-               message: "Update Failed!",
+               message: `Class ${updateStatus} Failed!`,
+            });
+         }
+      });
+
+      // manage Classes feedback <> Admin <> (params=id, req.body)
+      app.patch("/class-feedback/:id", verifyJWT, async (req, res) => {
+         const { id } = req.params;
+         const { feedback } = req.body;
+         const result = await classesCollection.updateOne(
+            { _id: new ObjectId(id) },
+            {
+               $set: {
+                  feedback: feedback,
+               },
+            }
+         );
+         if (result.modifiedCount) {
+            return res.status(200).json({
+               success: true,
+               message: `Send Feedback`,
+            });
+         } else {
+            return res.status(400).json({
+               success: false,
+               message: `Feedback Send Failed!`,
             });
          }
       });
