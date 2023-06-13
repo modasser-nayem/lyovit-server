@@ -420,10 +420,10 @@ async function run() {
                {
                   projection: {
                      _id: 1,
-                     // class_id: 1,
                      class_name: 1,
                      img: 1,
                      instructor_name: 1,
+                     enrolled_students: 1,
                      seats: 1,
                      price: 1,
                   },
@@ -590,8 +590,19 @@ async function run() {
       // delete a class <> Instructor <>
 
       // get all classes <> Admin || public <>
-      app.get("/classes", async (req, res) => {
+      app.get("/classes", verifyJWT, verifyAdmin, async (req, res) => {
          const classes = await classesCollection.find().toArray();
+         res.status(200).json({
+            success: true,
+            data: classes,
+         });
+      });
+
+      // get all approved classes <> public <>
+      app.get("/approved-classes", async (req, res) => {
+         const classes = await classesCollection
+            .find({ status: "approved" })
+            .toArray();
          res.status(200).json({
             success: true,
             data: classes,
@@ -623,6 +634,20 @@ async function run() {
                success: false,
                message: "Server error",
             });
+         }
+      });
+
+      // get all Instructor <> Public <>
+      app.get("/instructors", async (req, res) => {
+         const instructors = await userCollection
+            .find({ role: "instructor" })
+            .toArray();
+         if (instructors) {
+            return res.status(200).json({ success: true, data: instructors });
+         } else {
+            return res
+               .status(500)
+               .json({ success: false, message: "server error" });
          }
       });
 
