@@ -214,114 +214,72 @@ async function run() {
          next();
       };
 
-      // Select a class <> Student <> (req.body=id)
-      app.post("/select-class", verifyJWT, verifyStudent, async (req, res) => {
-         const _id = req.body.id;
-         const query = { email: "nayem@gmail.com" || req.decode.email };
-         const result = await userCollection.updateOne(query, {
-            $addToSet: {
-               selected_classes: _id,
-            },
-         });
-         if (result.modifiedCount) {
-            return res.status(200).json({
-               success: true,
-               message: "Selected Class",
-            });
-         } else if (result.modifiedCount === 0) {
-            return res.status(400).json({
-               success: false,
-               message: "Class not selected",
-            });
-         }
-         res.status(500).json({
-            success: false,
-            message: "Server error",
-         });
-      });
-
-      // My selected class <> Student <>
-      app.get(
-         "/my-selected-class",
+      // Select a class <> Student <> (req.params=id)
+      app.post(
+         "/select-class/:id",
          verifyJWT,
          verifyStudent,
          async (req, res) => {
-            const email = req.decoded.email;
-            const user = await userCollection.findOne({ email });
-            if (user) {
-               const selectedClass = user.selected_classes;
-               let classes = [];
-               for (id in selectedClass) {
-                  classes = await classesCollection
-                     .find(
-                        {
-                           _id: new ObjectId(selectedClass[id]),
-                        },
-                        {
-                           projection: {
-                              class_id: 1,
-                              class_name: 1,
-                              img: 1,
-                              instructor_name: 1,
-                              seats: 1,
-                              price: 1,
-                           },
-                        }
-                     )
-                     .toArray();
-               }
-               if (classes) {
-                  return res.json({
+            const _id = req.params.id;
+            const query = { email: req.decoded.email };
+            const exist = await userCollection.findOne(query);
+            if (exist.selected_classes.includes(_id)) {
+               return res.status(400).json({
+                  success: false,
+                  message: "Class Already Selected",
+               });
+            } else {
+               const result = await userCollection.updateOne(query, {
+                  $addToSet: {
+                     selected_classes: _id,
+                  },
+               });
+               if (result.modifiedCount) {
+                  return res.status(200).json({
                      success: true,
-                     data: classes,
+                     message: "Class Selected Success",
+                  });
+               } else if (result.modifiedCount === 0) {
+                  return res.status(400).json({
+                     success: false,
+                     message: "Class Selected Failed!",
                   });
                }
-               res.json({
-                  success: false,
-                  message: "server error",
-               });
             }
+            res.status(500).json({
+               success: false,
+               message: "Server error",
+            });
          }
       );
 
-      // My Enrolled class <> Student <>
-      app.get(
-         "/my-enrolled-class",
+      // Delete a Select class <> Student <> (req.params=id)
+      app.delete(
+         "/select-class/:id",
          verifyJWT,
          verifyStudent,
          async (req, res) => {
-            const email = req.decoded.email;
-            const user = await userCollection.findOne({ email });
-            const enrolledClass = user.enrolled_classes;
-            let classes = [];
-            for (id in enrolledClass) {
-               classes = await classesCollection
-                  .find(
-                     {
-                        _id: new ObjectId(enrolledClass[id]),
-                     },
-                     {
-                        projection: {
-                           class_id: 1,
-                           class_name: 1,
-                           img: 1,
-                           instructor_name: 1,
-                           seats: 1,
-                           price: 1,
-                        },
-                     }
-                  )
-                  .toArray();
-            }
-            if (classes) {
-               return res.json({
+            const _id = req.params.id;
+            const query = { email: req.decoded.email };
+            const result = await userCollection.updateOne(query, {
+               $pull: {
+                  selected_classes: _id,
+               },
+            });
+            if (result.modifiedCount) {
+               return res.status(200).json({
                   success: true,
-                  data: classes,
+                  message: "Delete Selected Class",
+               });
+            } else if (result.modifiedCount === 0) {
+               return res.status(400).json({
+                  success: false,
+                  message: "Class not Deleted",
                });
             }
-            res.json({
+            res.status(500).json({
                success: false,
-               message: "server error",
+               message: "Server error",
             });
          }
       );
@@ -411,6 +369,92 @@ async function run() {
             });
          }
       });
+
+      // My selected class <> Student <>
+      app.get(
+         "/my-selected-class",
+         verifyJWT,
+         verifyStudent,
+         async (req, res) => {
+            const email = req.decoded.email;
+            const user = await userCollection.findOne({ email });
+            if (user) {
+               const selectedClass = user.selected_classes;
+               const classes = [];
+               for (let i = 0; i < selectedClass.length; i++) {
+                  console.log(selectedClass[i]);
+                  const singleClass = await classesCollection.findOne(
+                     {
+                        _id: new ObjectId(selectedClass[i]),
+                     },
+                     {
+                        projection: {
+                           _id: 1,
+                           class_name: 1,
+                           img: 1,
+                           instructor_name: 1,
+                           seats: 1,
+                           price: 1,
+                        },
+                     }
+                  );
+                  classes.push(singleClass);
+               }
+
+               if (classes) {
+                  return res.json({
+                     success: true,
+                     data: classes,
+                  });
+               }
+            }
+            res.json({
+               success: false,
+               message: "server error",
+            });
+         }
+      );
+
+      // My Enrolled class <> Student <>
+      app.get(
+         "/my-enrolled-class",
+         verifyJWT,
+         verifyStudent,
+         async (req, res) => {
+            const email = req.decoded.email;
+            const user = await userCollection.findOne({ email });
+            const enrolledClass = user.enrolled_classes;
+            const classes = [];
+            for (let i = 0; i < enrolledClass.length; i++) {
+               const singleClass = await classesCollection.findOne(
+                  {
+                     _id: new ObjectId(enrolledClass[i]),
+                  },
+                  {
+                     projection: {
+                        _id: 1,
+                        class_name: 1,
+                        img: 1,
+                        instructor_name: 1,
+                        seats: 1,
+                        price: 1,
+                     },
+                  }
+               );
+               classes.push(singleClass);
+            }
+            if (classes) {
+               return res.json({
+                  success: true,
+                  data: classes,
+               });
+            }
+            res.json({
+               success: false,
+               message: "server error",
+            });
+         }
+      );
 
       // Popular classes <> Public <>
       app.get("/popular-classes", async (req, res) => {
@@ -609,6 +653,44 @@ async function run() {
          });
       });
 
+      // get all Instructor <> Public <>
+      app.get("/instructors", async (req, res) => {
+         const instructors = await userCollection
+            .find({ role: "instructor" })
+            .toArray();
+         if (instructors) {
+            return res.status(200).json({ success: true, data: instructors });
+         } else {
+            return res
+               .status(500)
+               .json({ success: false, message: "server error" });
+         }
+      });
+
+      // get total course
+      app.get("/impacts", async (req, res) => {
+         try {
+            const totalStudents = await userCollection.countDocuments({
+               role: "student",
+            });
+
+            const totalInstructors = await userCollection.countDocuments({
+               role: "instructor",
+            });
+
+            const totalClasses = await classesCollection.countDocuments({
+               status: "approved",
+            });
+
+            res.status(200).json({
+               success: true,
+               data: { totalStudents, totalInstructors, totalClasses },
+            });
+         } catch (error) {
+            res.status(500).json({ success: false, message: "server error" });
+         }
+      });
+
       // get all users <> Admin <>
       app.get("/users", verifyJWT, verifyAdmin, async (req, res) => {
          const options = {
@@ -634,20 +716,6 @@ async function run() {
                success: false,
                message: "Server error",
             });
-         }
-      });
-
-      // get all Instructor <> Public <>
-      app.get("/instructors", async (req, res) => {
-         const instructors = await userCollection
-            .find({ role: "instructor" })
-            .toArray();
-         if (instructors) {
-            return res.status(200).json({ success: true, data: instructors });
-         } else {
-            return res
-               .status(500)
-               .json({ success: false, message: "server error" });
          }
       });
 
