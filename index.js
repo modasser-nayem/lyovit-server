@@ -24,24 +24,31 @@ app.get("/", (req, res) => {
 
 // verify jwt middleware function
 const verifyJWT = async (req, res, next) => {
-   const authorization = req.headers.authorization;
-   if (!authorization) {
-      return res
-         .status(401)
-         .send({ success: false, message: "unauthorized access" });
-   }
-   // bearer token
-   const token = authorization.split(" ")[1];
-
-   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-      if (err) {
+   try {
+      const authorization = req.headers.authorization;
+      if (!authorization) {
          return res
             .status(401)
             .send({ success: false, message: "unauthorized access" });
       }
-      req.decoded = decoded;
-      next();
-   });
+      // bearer token
+      const token = authorization.split(" ")[1];
+
+      jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+         if (err) {
+            return res
+               .status(401)
+               .send({ success: false, message: "unauthorized access" });
+         }
+         req.decoded = decoded;
+         next();
+      });
+   } catch (error) {
+      res.status(500).json({
+         success: false,
+         message: "Server error",
+      });
+   }
 };
 
 //---------------------------------------------
@@ -79,139 +86,181 @@ async function run() {
       //<|---------------- Routes Start ------------------|>//
       // Create user <> user <>
       app.post("/createUser", async (req, res) => {
-         const { email, name, photoURL } = req.body;
-         const user = await userCollection.findOne({ email });
-         if (user) {
-            return res.status(400).json({
-               success: false,
-               message: "User Already exist",
-            });
-         } else {
-            const result = await userCollection.insertOne({
-               name,
-               email,
-               photoURL,
-               role: "student",
-               selected_classes: [],
-               enrolled_classes: [],
-               payment: [],
-               number_of_classes: 0,
-               name_of_classes: [],
-               createdAt: Date.now(),
-            });
-            if (result.acknowledged) {
-               res.status(201).json({
-                  success: true,
-                  message: "User Created Success",
+         try {
+            const { email, name, photoURL } = req.body;
+            const user = await userCollection.findOne({ email });
+            if (user) {
+               return res.status(400).json({
+                  success: false,
+                  message: "User Already exist",
                });
             } else {
-               res.status(400).json({
-                  success: false,
-                  message: "User Created Failed!",
+               const result = await userCollection.insertOne({
+                  name,
+                  email,
+                  photoURL,
+                  role: "student",
+                  selected_classes: [],
+                  enrolled_classes: [],
+                  payment: [],
+                  number_of_classes: 0,
+                  name_of_classes: [],
+                  createdAt: Date.now(),
                });
+               if (result.acknowledged) {
+                  res.status(201).json({
+                     success: true,
+                     message: "User Created Success",
+                  });
+               } else {
+                  res.status(400).json({
+                     success: false,
+                     message: "User Created Failed!",
+                  });
+               }
             }
+         } catch (error) {
+            res.status(500).json({
+               success: false,
+               message: "Server error",
+            });
          }
       });
 
       // Create JWT
       app.post("/jwt", async (req, res) => {
-         const { email } = req.body;
-         const user = await userCollection.findOne({ email });
-         if (user) {
-            const token = jwt.sign(
-               { email: user.email, role: user.role },
-               process.env.JWT_SECRET,
-               {
-                  expiresIn: "1d",
-               }
-            );
-            res.status(200).json({
-               success: true,
-               token: "Bearer " + token,
-            });
-         } else {
-            return res.status(400).json({
+         try {
+            const { email } = req.body;
+            const user = await userCollection.findOne({ email });
+            if (user) {
+               const token = jwt.sign(
+                  { email: user.email, role: user.role, _id: user._id },
+                  process.env.JWT_SECRET,
+                  {
+                     expiresIn: "1d",
+                  }
+               );
+               res.status(200).json({
+                  success: true,
+                  token: "Bearer " + token,
+               });
+            } else {
+               return res.status(400).json({
+                  success: false,
+                  message: "This user is not exist",
+               });
+            }
+         } catch (error) {
+            res.status(500).json({
                success: false,
-               message: "This user is not exist",
+               message: "Server error",
             });
          }
       });
 
       // get single user
       app.get("/user", async (req, res) => {
-         const email = req.query.email;
-         const user = await userCollection.findOne({ email });
-         if (user) {
-            return res.status(200).json({
-               success: true,
-               data: user,
-            });
-         } else {
-            return res.status(400).json({
+         try {
+            const email = req.query.email;
+            const user = await userCollection.findOne({ email });
+            if (user) {
+               return res.status(200).json({
+                  success: true,
+                  data: user,
+               });
+            } else {
+               return res.status(400).json({
+                  success: false,
+                  message: "User not found!",
+               });
+            }
+         } catch (error) {
+            res.status(500).json({
                success: false,
-               message: "User not found!",
+               message: "Server error",
             });
          }
       });
 
       // verify Admin middleware function
       const verifyAdmin = async (req, res, next) => {
-         const email = req.decoded.email;
-         const user = await userCollection.findOne(
-            { email },
-            {
-               projection: {
-                  role: 1,
-               },
+         try {
+            const email = req.decoded.email;
+            const user = await userCollection.findOne(
+               { email },
+               {
+                  projection: {
+                     role: 1,
+                  },
+               }
+            );
+            if (user.role !== "admin") {
+               return res.status(403).json({
+                  success: false,
+                  message: "Forbidden Access",
+               });
             }
-         );
-         if (user.role !== "admin") {
-            return res.status(403).json({
+            next();
+         } catch (error) {
+            res.status(500).json({
                success: false,
-               message: "Forbidden Access",
+               message: "Server error",
             });
          }
-         next();
       };
 
       // verify Instructor middleware function
       const verifyInstructor = async (req, res, next) => {
-         const email = req.decoded.email;
-         const user = await userCollection.findOne(
-            { email },
-            {
-               projection: {
-                  role: 1,
-               },
+         try {
+            const email = req.decoded.email;
+            const user = await userCollection.findOne(
+               { email },
+               {
+                  projection: {
+                     role: 1,
+                  },
+               }
+            );
+            if (user.role !== "instructor") {
+               return res.status(403).json({
+                  success: false,
+                  message: "Forbidden Access",
+               });
             }
-         );
-         if (user.role !== "instructor") {
-            return res.status(403).json({
+            next();
+         } catch (error) {
+            res.status(500).json({
                success: false,
-               message: "Forbidden Access",
+               message: "Server error",
             });
          }
-         next();
       };
 
       // verify Student middleware function
       const verifyStudent = async (req, res, next) => {
-         const email = req.decoded.email;
-         const user = await userCollection.findOne(
-            { email },
-            {
-               projection: {
-                  role: 1,
-               },
+         try {
+            const email = req.decoded.email;
+            const user = await userCollection.findOne(
+               { email },
+               {
+                  projection: {
+                     role: 1,
+                  },
+               }
+            );
+            if (user.role !== "student") {
+               return res.status(403).json({
+                  success: false,
+                  message: "Forbidden Access",
+               });
             }
-         );
-         if (user.role !== "student") {
-            return res.status(403).json({
+            next();
+         } catch (error) {
+            res.status(500).json({
                success: false,
-               message: "Forbidden Access",
+               message: "Server error",
             });
          }
-         next();
       };
 
       // Select a class <> Student <> (req.params=id)
@@ -220,36 +269,39 @@ async function run() {
          verifyJWT,
          verifyStudent,
          async (req, res) => {
-            const _id = req.params.id;
-            const query = { email: req.decoded.email };
-            const exist = await userCollection.findOne(query);
-            if (exist.selected_classes.includes(_id)) {
-               return res.status(400).json({
-                  success: false,
-                  message: "Class Already Selected",
-               });
-            } else {
-               const result = await userCollection.updateOne(query, {
-                  $addToSet: {
-                     selected_classes: _id,
-                  },
-               });
-               if (result.modifiedCount) {
-                  return res.status(200).json({
-                     success: true,
-                     message: "Class Selected Success",
-                  });
-               } else if (result.modifiedCount === 0) {
+            try {
+               const _id = req.params.id;
+               const query = { email: req.decoded.email };
+               const exist = await userCollection.findOne(query);
+               if (exist.selected_classes.includes(_id)) {
                   return res.status(400).json({
                      success: false,
-                     message: "Class Selected Failed!",
+                     message: "Class Already Selected",
                   });
+               } else {
+                  const result = await userCollection.updateOne(query, {
+                     $addToSet: {
+                        selected_classes: _id,
+                     },
+                  });
+                  if (result.modifiedCount) {
+                     return res.status(200).json({
+                        success: true,
+                        message: "Class Selected Success",
+                     });
+                  } else if (result.modifiedCount === 0) {
+                     return res.status(400).json({
+                        success: false,
+                        message: "Class Selected Failed!",
+                     });
+                  }
                }
+            } catch (error) {
+               res.status(500).json({
+                  success: false,
+                  message: "Server error",
+               });
             }
-            res.status(500).json({
-               success: false,
-               message: "Server error",
-            });
          }
       );
 
@@ -259,116 +311,158 @@ async function run() {
          verifyJWT,
          verifyStudent,
          async (req, res) => {
-            const _id = req.params.id;
-            const query = { email: req.decoded.email };
-            const result = await userCollection.updateOne(query, {
-               $pull: {
-                  selected_classes: _id,
-               },
-            });
-            if (result.modifiedCount) {
-               return res.status(200).json({
-                  success: true,
-                  message: "Delete Selected Class",
+            try {
+               const _id = req.params.id;
+               const query = { email: req.decoded.email };
+               const result = await userCollection.updateOne(query, {
+                  $pull: {
+                     selected_classes: _id,
+                  },
                });
-            } else if (result.modifiedCount === 0) {
-               return res.status(400).json({
+               if (result.modifiedCount) {
+                  return res.status(200).json({
+                     success: true,
+                     message: "Delete Selected Class",
+                  });
+               } else if (result.modifiedCount === 0) {
+                  return res.status(400).json({
+                     success: false,
+                     message: "Class not Deleted",
+                  });
+               }
+            } catch (error) {
+               res.status(500).json({
                   success: false,
-                  message: "Class not Deleted",
+                  message: "Server error",
                });
             }
-            res.status(500).json({
-               success: false,
-               message: "Server error",
-            });
          }
       );
 
-      // Enrolled a Class <> Student <> (req.body)
+      // Payment a Class <> Student <> (req.body)
       app.post("/payment", verifyJWT, verifyStudent, async (req, res) => {
-         const {
-            class_id,
-            class_name,
-            img,
-            author_id,
-            amount,
-            date,
-            transaction_id,
-         } = req.body;
-         const exist = await userCollection.findOne({
-            _id: new ObjectId(author_id),
-         });
-         const availableSeat = await classesCollection.findOne({
-            _id: new ObjectId(class_id),
-         });
-         if (availableSeat.seats > 0) {
-            if (!exist.enrolled_classes.includes(class_id)) {
-               const result = await paymentCollection.insertOne(req.body);
-               if (!result) {
-                  return res.status(500).json({
-                     success: false,
-                     message: "server error",
-                  });
-               }
-               if (result.insertedId) {
-                  const updateClass = await classesCollection.updateOne(
-                     { _id: new ObjectId(class_id) },
-                     {
-                        $inc: {
-                           enrolled_students: 1,
-                           seats: -1,
-                        },
-                     }
-                  );
-                  const updateUser = await userCollection.updateOne(
-                     { _id: new ObjectId(author_id) },
-                     {
-                        $pull: {
-                           selected_classes: class_id,
-                        },
-                        $addToSet: {
-                           enrolled_classes: class_id,
-                           payment: result.insertedId,
-                        },
-                     }
-                  );
-                  if (updateClass.modifiedCount && updateUser.modifiedCount) {
-                     return res.status(201).json({
-                        success: true,
-                        message: "Class Enrolled Success",
-                        updateClass,
-                        updateUser,
-                     });
-                  } else {
-                     await paymentCollection.deleteOne({
-                        _id: result.insertedId,
-                     });
-                     return res.status(201).json({
+         try {
+            const { class_id, class_name, img, amount } = req.body;
+            const author_id = req.decoded._id;
+            const paymentDoc = {
+               class_id,
+               class_name,
+               img,
+               amount,
+               author_id,
+               createdAt: Date.now(),
+               transaction: {},
+            };
+            const exist = await userCollection.findOne({
+               _id: new ObjectId(author_id),
+            });
+            const availableSeat = await classesCollection.findOne({
+               _id: new ObjectId(class_id),
+            });
+            if (availableSeat.seats > 0) {
+               if (!exist.enrolled_classes.includes(class_id)) {
+                  const result = await paymentCollection.insertOne(paymentDoc);
+                  if (!result) {
+                     return res.status(400).json({
                         success: false,
                         message: "Class Enrolled Failed!",
-                        updateClass,
-                        updateUser,
+                     });
+                  }
+                  if (result.insertedId) {
+                     const updateClass = await classesCollection.updateOne(
+                        { _id: new ObjectId(class_id) },
+                        {
+                           $inc: {
+                              enrolled_students: 1,
+                              seats: -1,
+                           },
+                        }
+                     );
+                     const updateUser = await userCollection.updateOne(
+                        { _id: new ObjectId(author_id) },
+                        {
+                           $pull: {
+                              selected_classes: class_id,
+                           },
+                           $addToSet: {
+                              enrolled_classes: class_id,
+                              payment: result.insertedId,
+                           },
+                        }
+                     );
+                     if (
+                        updateClass.modifiedCount &&
+                        updateUser.modifiedCount
+                     ) {
+                        return res.status(201).json({
+                           success: true,
+                           message: "Class Enrolled Success",
+                           updateClass,
+                           updateUser,
+                        });
+                     } else {
+                        await paymentCollection.deleteOne({
+                           _id: result.insertedId,
+                        });
+                        return res.status(400).json({
+                           success: false,
+                           message: "Class Enrolled Failed!",
+                           updateClass,
+                           updateUser,
+                        });
+                     }
+                  } else {
+                     return res.status(400).json({
+                        success: false,
+                        message: "Class Enrolled Failed!",
                      });
                   }
                } else {
-                  return res.status(500).json({
+                  return res.status(400).json({
                      success: false,
-                     message: "server error",
+                     message: "Already Enrolled",
                   });
                }
             } else {
                return res.status(400).json({
                   success: false,
-                  message: "Already Enrolled",
+                  message: "Seat Not Available",
                });
             }
-         } else {
-            return res.status(400).json({
+         } catch (error) {
+            return res.status(500).json({
                success: false,
-               message: "Seat Not Available",
+               message: "Server error",
             });
          }
       });
+
+      // payment history <> Student <>
+      app.get(
+         "/payment-history",
+         verifyJWT,
+         verifyStudent,
+         async (req, res) => {
+            try {
+               const author_id = req.decoded._id;
+               const paymentHistory = await paymentCollection
+                  .find({
+                     author_id,
+                  })
+                  .sort({ createdAt: -1 })
+                  .toArray();
+               res.status(200).json({
+                  success: true,
+                  data: paymentHistory,
+               });
+            } catch (error) {
+               res.status(500).json({
+                  success: false,
+                  message: "server error",
+               });
+            }
+         }
+      );
 
       // My selected class <> Student <>
       app.get(
@@ -376,16 +470,63 @@ async function run() {
          verifyJWT,
          verifyStudent,
          async (req, res) => {
-            const email = req.decoded.email;
-            const user = await userCollection.findOne({ email });
-            if (user) {
-               const selectedClass = user.selected_classes;
+            try {
+               const email = req.decoded.email;
+               const user = await userCollection.findOne({ email });
+               if (user) {
+                  const selectedClass = user.selected_classes;
+                  const classes = [];
+                  for (let i = 0; i < selectedClass.length; i++) {
+                     console.log(selectedClass[i]);
+                     const singleClass = await classesCollection.findOne(
+                        {
+                           _id: new ObjectId(selectedClass[i]),
+                        },
+                        {
+                           projection: {
+                              _id: 1,
+                              class_name: 1,
+                              img: 1,
+                              instructor_name: 1,
+                              seats: 1,
+                              price: 1,
+                           },
+                        }
+                     );
+                     classes.push(singleClass);
+                  }
+
+                  if (classes) {
+                     return res.json({
+                        success: true,
+                        data: classes,
+                     });
+                  }
+               }
+            } catch (error) {
+               res.status(500).json({
+                  success: false,
+                  message: "server error",
+               });
+            }
+         }
+      );
+
+      // My Enrolled class <> Student <>
+      app.get(
+         "/my-enrolled-class",
+         verifyJWT,
+         verifyStudent,
+         async (req, res) => {
+            try {
+               const email = req.decoded.email;
+               const user = await userCollection.findOne({ email });
+               const enrolledClass = user.enrolled_classes;
                const classes = [];
-               for (let i = 0; i < selectedClass.length; i++) {
-                  console.log(selectedClass[i]);
+               for (let i = 0; i < enrolledClass.length; i++) {
                   const singleClass = await classesCollection.findOne(
                      {
-                        _id: new ObjectId(selectedClass[i]),
+                        _id: new ObjectId(enrolledClass[i]),
                      },
                      {
                         projection: {
@@ -400,270 +541,279 @@ async function run() {
                   );
                   classes.push(singleClass);
                }
-
                if (classes) {
                   return res.json({
                      success: true,
                      data: classes,
                   });
                }
+            } catch (error) {
+               res.status(500).json({
+                  success: false,
+                  message: "server error",
+               });
             }
-            res.json({
-               success: false,
-               message: "server error",
-            });
          }
       );
 
-      // My Enrolled class <> Student <>
-      app.get(
-         "/my-enrolled-class",
-         verifyJWT,
-         verifyStudent,
-         async (req, res) => {
-            const email = req.decoded.email;
-            const user = await userCollection.findOne({ email });
-            const enrolledClass = user.enrolled_classes;
-            const classes = [];
-            for (let i = 0; i < enrolledClass.length; i++) {
-               const singleClass = await classesCollection.findOne(
-                  {
-                     _id: new ObjectId(enrolledClass[i]),
-                  },
+      // Popular classes <> Public <>
+      app.get("/popular-classes", async (req, res) => {
+         try {
+            const popularClasses = await classesCollection
+               .find(
+                  {},
                   {
                      projection: {
                         _id: 1,
                         class_name: 1,
                         img: 1,
                         instructor_name: 1,
+                        enrolled_students: 1,
                         seats: 1,
                         price: 1,
                      },
                   }
-               );
-               classes.push(singleClass);
-            }
-            if (classes) {
-               return res.json({
-                  success: true,
-                  data: classes,
-               });
-            }
-            res.json({
+               )
+               .sort({ enrolled_students: -1 })
+               .limit(6)
+               .toArray();
+
+            res.status(200).json({
+               success: true,
+               data: popularClasses,
+            });
+         } catch (error) {
+            res.status(500).json({
                success: false,
                message: "server error",
             });
          }
-      );
-
-      // Popular classes <> Public <>
-      app.get("/popular-classes", async (req, res) => {
-         const popularClasses = await classesCollection
-            .find(
-               {},
-               {
-                  projection: {
-                     _id: 1,
-                     class_name: 1,
-                     img: 1,
-                     instructor_name: 1,
-                     enrolled_students: 1,
-                     seats: 1,
-                     price: 1,
-                  },
-               }
-            )
-            .sort({ enrolled_students: -1 })
-            .limit(6)
-            .toArray();
-         if (popularClasses) {
-            return res.status(200).json({
-               success: true,
-               data: popularClasses,
-            });
-         }
-         res.status(500).json({
-            success: false,
-            message: "server error",
-         });
       });
 
       // Popular Instructors <> Public <> TODO: not implement
       app.get("/popular-instructor", async (req, res) => {
-         const classes = await classesCollection
-            .find(
-               {},
-               {
-                  projection: {
-                     enrolled_students: 1,
-                  },
-               }
-            )
-            .toArray();
-         const popularInstructor = await userCollection.find().toArray();
-         if (popularInstructor) {
-            return res.status(200).json({
-               success: true,
-               data: popularInstructor,
+         try {
+            const result = await userCollection
+               .find({ role: "instructor" }, { projection: { email: 1 } })
+               .toArray();
+            for (let i = 0; i > result.length; i++) {
+               console.log(result[i].email);
+            }
+            // .aggregate([
+            //    {
+            //      $lookup: {
+            //        from: 'classes',
+            //        localField: '_id',
+            //        foreignField: 'instructor_email',
+            //        as: 'classes',
+            //      },
+            //    },
+            //    {
+            //      $project: {
+            //        _id: 1,
+            //        email: 1,
+            //        classCount: { $size: '$classes' },
+            //        totalStudents: { $sum: { $map: { input: '$classes', as: 'class', in: { $size: '$$class.enrolled_students' } } } },
+            //      },
+            //    },
+            //    { $sort: { totalStudents: -1 } },
+            res.status(200).json({ success: true, data: result });
+         } catch (error) {
+            res.status(500).json({
+               success: false,
+               message: "server error",
             });
          }
-         res.status(500).json({
-            success: false,
-            message: "server error",
-         });
       });
 
       // add a class <> Instructor <> (req.body)
       app.post("/class", verifyJWT, verifyInstructor, async (req, res) => {
-         const {
-            class_name,
-            img,
-            instructor_name,
-            instructor_email,
-            seats,
-            price,
-         } = req.body;
-         const doc = {
-            class_name,
-            img,
-            instructor_name,
-            instructor_email,
-            seats,
-            price,
-            enrolled_students: 0,
-            status: "pending",
-            feedback: "",
-         };
-         const result = await classesCollection.insertOne(doc);
-         if (result.insertedId) {
-            const user = await userCollection.findOne({
-               email: instructor_email,
-            });
-            const updateDoc = await userCollection.updateOne(
-               { email: instructor_email },
-               {
-                  $set: {
-                     number_of_classes: user.number_of_classes + 1,
-                     name_of_classes: [...user.name_of_classes, class_name],
-                  },
+         try {
+            const {
+               class_name,
+               img,
+               instructor_name,
+               instructor_email,
+               seats,
+               price,
+            } = req.body;
+            const doc = {
+               class_name,
+               img,
+               instructor_name,
+               instructor_email,
+               seats,
+               price,
+               enrolled_students: 0,
+               status: "pending",
+               feedback: "",
+            };
+            const result = await classesCollection.insertOne(doc);
+            if (result.insertedId) {
+               const user = await userCollection.findOne({
+                  email: instructor_email,
+               });
+               const updateDoc = await userCollection.updateOne(
+                  { email: instructor_email },
+                  {
+                     $set: {
+                        number_of_classes: user.number_of_classes + 1,
+                        name_of_classes: [...user.name_of_classes, class_name],
+                     },
+                  }
+               );
+               if (updateDoc.modifiedCount) {
+                  return res.status(201).json({
+                     success: true,
+                     message: "Class Created Success",
+                  });
+               } else {
+                  await classesCollection.deleteOne({
+                     _id: new ObjectId(result.insertedId),
+                  });
+                  return res.status(400).json({
+                     success: false,
+                     message: "Class Created Failed!",
+                  });
                }
-            );
-            if (updateDoc.modifiedCount) {
-               return res.status(201).json({
-                  success: true,
-                  message: "Class Created Success",
-               });
             } else {
-               await classesCollection.deleteOne({
-                  _id: new ObjectId(result.insertedId),
-               });
                return res.status(400).json({
                   success: false,
                   message: "Class Created Failed!",
                });
             }
-         } else {
-            return res.status(400).json({
+         } catch (error) {
+            res.status(500).json({
                success: false,
-               message: "Class Created Failed!",
+               message: "server error",
             });
          }
       });
 
       // My classes <> Instructor <>
       app.get("/my-classes", verifyJWT, verifyInstructor, async (req, res) => {
-         const email = req.decoded.email;
-         const myClasses = await classesCollection
-            .find({ instructor_email: email })
-            .toArray();
-         if (myClasses) {
-            return res.status(200).json({
+         try {
+            const email = req.decoded.email;
+            const myClasses = await classesCollection
+               .find({ instructor_email: email })
+               .toArray();
+            res.status(200).json({
                success: true,
                data: myClasses,
             });
-         } else {
-            return res.status(404).json({
+         } catch (error) {
+            res.status(500).json({
                success: false,
-               data: myClasses,
+               message: "server error",
             });
          }
       });
 
       // update class <> Instructor <> (params=id, req.body)
       app.patch("/class/:id", verifyJWT, verifyInstructor, async (req, res) => {
-         const { id } = req.params;
+         try {
+            const { id } = req.params;
 
-         const result = await classesCollection.updateOne(
-            { _id: new ObjectId(id) },
-            {
-               $set: req.body,
+            const result = await classesCollection.updateOne(
+               { _id: new ObjectId(id) },
+               {
+                  $set: req.body,
+               }
+            );
+            if (result.modifiedCount) {
+               return res.status(200).json({
+                  success: true,
+                  message: "Class Updated",
+               });
+            } else {
+               return res.status(400).json({
+                  success: false,
+                  message: "Class Updated Failed!",
+               });
             }
-         );
-         if (result.modifiedCount) {
-            return res.status(200).json({
-               success: true,
-               message: "Class Updated",
-            });
-         } else {
-            return res.status(400).json({
+         } catch (error) {
+            res.status(500).json({
                success: false,
-               message: "Class Updated Failed!",
+               message: "server error",
             });
          }
       });
 
       // Get single class <> public <>
       app.get("/class/:id", verifyJWT, async (req, res) => {
-         const { id } = req.params;
-         const result = await classesCollection.findOne({
-            _id: new ObjectId(id),
-         });
-         if (result) {
-            return res.status(200).json({
-               success: true,
-               data: result,
+         try {
+            const { id } = req.params;
+            const result = await classesCollection.findOne({
+               _id: new ObjectId(id),
             });
-         } else {
-            return res.status(200).json({
+            if (result) {
+               return res.status(200).json({
+                  success: true,
+                  data: result,
+               });
+            } else {
+               return res.status(200).json({
+                  success: false,
+                  message: "this class is not exist",
+               });
+            }
+         } catch (error) {
+            res.status(500).json({
                success: false,
-               message: "this class is not exist",
+               message: "server error",
             });
          }
       });
 
-      // delete a class <> Instructor <>
-
       // get all classes <> Admin || public <>
       app.get("/classes", verifyJWT, verifyAdmin, async (req, res) => {
-         const classes = await classesCollection.find().toArray();
-         res.status(200).json({
-            success: true,
-            data: classes,
-         });
+         try {
+            const classes = await classesCollection.find().toArray();
+            res.status(200).json({
+               success: true,
+               data: classes,
+            });
+         } catch (error) {
+            res.status(500).json({
+               success: false,
+               message: "server error",
+            });
+         }
       });
 
       // get all approved classes <> public <>
       app.get("/approved-classes", async (req, res) => {
-         const classes = await classesCollection
-            .find({ status: "approved" })
-            .toArray();
-         res.status(200).json({
-            success: true,
-            data: classes,
-         });
+         try {
+            const classes = await classesCollection
+               .find({ status: "approved" })
+               .toArray();
+            res.status(200).json({
+               success: true,
+               data: classes,
+            });
+         } catch (error) {
+            res.status(500).json({
+               success: false,
+               message: "server error",
+            });
+         }
       });
 
       // get all Instructor <> Public <>
       app.get("/instructors", async (req, res) => {
-         const instructors = await userCollection
-            .find({ role: "instructor" })
-            .toArray();
-         if (instructors) {
-            return res.status(200).json({ success: true, data: instructors });
-         } else {
-            return res
-               .status(500)
-               .json({ success: false, message: "server error" });
+         try {
+            const instructors = await userCollection
+               .find({ role: "instructor" })
+               .toArray();
+            res.status(200).json({
+               success: true,
+               data: instructors,
+            });
+         } catch (error) {
+            res.status(500).json({
+               success: false,
+               message: "server error",
+            });
          }
       });
 
@@ -693,26 +843,26 @@ async function run() {
 
       // get all users <> Admin <>
       app.get("/users", verifyJWT, verifyAdmin, async (req, res) => {
-         const options = {
-            // sort returned documents in ascending order by title (A->Z)
-            // sort: { name: 1 },
-            projection: {
-               _id: 1,
-               name: 1,
-               email: 1,
-               photoURL: 1,
-               role: 1,
-               createdAt: 1,
-            },
-         };
-         const users = await userCollection.find({}, options).toArray();
-         if (users) {
-            return res.status(200).json({
+         try {
+            const options = {
+               // sort returned documents in ascending order by title (A->Z)
+               // sort: { name: 1 },
+               projection: {
+                  _id: 1,
+                  name: 1,
+                  email: 1,
+                  photoURL: 1,
+                  role: 1,
+                  createdAt: 1,
+               },
+            };
+            const users = await userCollection.find({}, options).toArray();
+            res.status(200).json({
                success: true,
                data: users,
             });
-         } else {
-            return res.status(500).json({
+         } catch (error) {
+            res.status(500).json({
                success: false,
                message: "Server error",
             });
@@ -725,25 +875,32 @@ async function run() {
          verifyJWT,
          verifyAdmin,
          async (req, res) => {
-            const { id } = req.params;
-            const updateRole = req.query.role;
-            const user = await userCollection.updateOne(
-               { _id: new ObjectId(id) },
-               {
-                  $set: {
-                     role: updateRole,
-                  },
+            try {
+               const { id } = req.params;
+               const updateRole = req.query.role;
+               const user = await userCollection.updateOne(
+                  { _id: new ObjectId(id) },
+                  {
+                     $set: {
+                        role: updateRole,
+                     },
+                  }
+               );
+               if (user.modifiedCount) {
+                  return res.status(200).json({
+                     success: true,
+                     message: `Update to ${updateRole}`,
+                  });
+               } else {
+                  return res.status(400).json({
+                     success: false,
+                     message: "Update Failed!",
+                  });
                }
-            );
-            if (user.modifiedCount) {
-               return res.status(200).json({
-                  success: true,
-                  message: `Update to ${updateRole}`,
-               });
-            } else {
-               return res.status(400).json({
+            } catch (error) {
+               res.status(500).json({
                   success: false,
-                  message: "Update Failed!",
+                  message: "server error",
                });
             }
          }
@@ -755,25 +912,32 @@ async function run() {
          verifyJWT,
          verifyAdmin,
          async (req, res) => {
-            const { id } = req.params;
-            const updateStatus = req.query.status;
-            const result = await classesCollection.updateOne(
-               { _id: new ObjectId(id) },
-               {
-                  $set: {
-                     status: updateStatus,
-                  },
+            try {
+               const { id } = req.params;
+               const updateStatus = req.query.status;
+               const result = await classesCollection.updateOne(
+                  { _id: new ObjectId(id) },
+                  {
+                     $set: {
+                        status: updateStatus,
+                     },
+                  }
+               );
+               if (result.modifiedCount) {
+                  return res.status(200).json({
+                     success: true,
+                     message: `Class is ${updateStatus}`,
+                  });
+               } else {
+                  return res.status(400).json({
+                     success: false,
+                     message: `Class ${updateStatus} Failed!`,
+                  });
                }
-            );
-            if (result.modifiedCount) {
-               return res.status(200).json({
-                  success: true,
-                  message: `Class is ${updateStatus}`,
-               });
-            } else {
-               return res.status(400).json({
+            } catch (error) {
+               res.status(500).json({
                   success: false,
-                  message: `Class ${updateStatus} Failed!`,
+                  message: "server error",
                });
             }
          }
@@ -785,25 +949,32 @@ async function run() {
          verifyJWT,
          verifyAdmin,
          async (req, res) => {
-            const { id } = req.params;
-            const { feedback } = req.body;
-            const result = await classesCollection.updateOne(
-               { _id: new ObjectId(id) },
-               {
-                  $set: {
-                     feedback: feedback,
-                  },
+            try {
+               const { id } = req.params;
+               const { feedback } = req.body;
+               const result = await classesCollection.updateOne(
+                  { _id: new ObjectId(id) },
+                  {
+                     $set: {
+                        feedback: feedback,
+                     },
+                  }
+               );
+               if (result.modifiedCount) {
+                  return res.status(200).json({
+                     success: true,
+                     message: `Send Feedback`,
+                  });
+               } else {
+                  return res.status(400).json({
+                     success: false,
+                     message: `Feedback Send Failed!`,
+                  });
                }
-            );
-            if (result.modifiedCount) {
-               return res.status(200).json({
-                  success: true,
-                  message: `Send Feedback`,
-               });
-            } else {
-               return res.status(400).json({
+            } catch (error) {
+               res.status(500).json({
                   success: false,
-                  message: `Feedback Send Failed!`,
+                  message: "server error",
                });
             }
          }
